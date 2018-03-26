@@ -12,9 +12,8 @@ This is implementation of style transfer algorithm described in:
 
 ## Example
 
-Content
 <p align="center">
-<img src="examples/cat/content.png" width="250"/>
-<img src="examples/cat/style.png" width="250"/>
-<img src="examples/cat/result.png" width="250"/>
+<img src="examples/cat/content.jpg" width="250"/>
+<img src="examples/cat/style.jpg" width="250"/>
+<img src="examples/cat/result.jpg" width="250"/>
 </p>
