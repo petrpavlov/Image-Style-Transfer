@@ -157,7 +157,7 @@ def transfer_style(content_image_filename, style_image_filename, result_image_fi
     style_layers_targets = get_style_layers_targets(style_image, True)
     style_loss = get_style_loss(style_layers, style_layers_targets, VGG_STYLE_LAYERS_WEIGHTS)
 
-    total_variation_loss = tf.image.total_variation(image)
+    total_variation_loss = tf.reduce_sum(tf.image.total_variation(image))
 
     loss = content_loss_weight * content_loss + style_loss_weight * style_loss + total_variation_loss_weight * \
            total_variation_loss
@@ -171,7 +171,7 @@ def transfer_style(content_image_filename, style_image_filename, result_image_fi
         for i in range(max_iterations):
             sess.run(train_operation)
             if verbose and (i % 50 == 0):
-                print(f'Iteration: {i}, Loss: {sess.run(loss)}')
+                print(f'Iteration: {i}, Loss: {sess.run(loss):.4}')
 
         result = sess.run(image)
         write_result_image(result, result_image_filename)
