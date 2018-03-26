@@ -11,11 +11,9 @@ from PIL import Image
 
 from vgg import vgg_19
 
-
 FILES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'files')
 if not os.path.exists(FILES_DIR):
     os.mkdir(FILES_DIR)
-
 
 CHECKPOINT_URL = 'http://download.tensorflow.org/models/vgg_19_2016_08_28.tar.gz'
 CHECKPOINT_FILENAME = os.path.join(FILES_DIR, 'vgg_19.ckpt')
@@ -133,6 +131,15 @@ def get_content_loss(content_layer, content_layer_target):
     return K * tf.reduce_sum(tf.pow(content_layer - content_layer_target, 2))
 
 
+def write_result_image(result, result_image_filename):
+    result = np.clip(result, 0, 255)
+    result = result.astype(np.uint8)
+    result = np.squeeze(result)
+
+    result_image = Image.fromarray(result, mode='RGB')
+    result_image.save(result_image_filename)
+
+
 def transfer_style(content_image_filename, style_image_filename, result_image_filename, content_loss_weight,
                    style_loss_weight, total_variation_loss_weight, max_iterations, verbose):
     content_image = read_content_image(content_image_filename)
@@ -152,8 +159,8 @@ def transfer_style(content_image_filename, style_image_filename, result_image_fi
 
     total_variation_loss = tf.image.total_variation(image)
 
-    loss = content_loss_weight * content_loss + style_loss_weight * style_loss +\
-           total_variation_loss_weight * total_variation_loss
+    loss = content_loss_weight * content_loss + style_loss_weight * style_loss + total_variation_loss_weight * \
+           total_variation_loss
     train_operation = tf.train.AdamOptimizer(learning_rate=1e0).minimize(loss)
 
     saver = tf.train.Saver(tf.get_collection('model_variables'))
@@ -167,9 +174,7 @@ def transfer_style(content_image_filename, style_image_filename, result_image_fi
                 print(f'Iteration: {i}, Loss: {sess.run(loss)}')
 
         result = sess.run(image)
-        result = np.squeeze(result.astype(np.uint8))
-
-        Image.fromarray(result, mode='RGB').save(result_image_filename)
+        write_result_image(result, result_image_filename)
 
 
 def main():
