@@ -1,12 +1,11 @@
 import argparse
-import argparse
 
 import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 from PIL import Image
 
-from util import vgg
+from restyling import losses, vgg_tools
 from settings import MAX_IMAGE_SIZE
 
 
@@ -16,7 +15,7 @@ def parse_args():
     parser.add_argument('content_image_filename', type=str, help='Path to content image')
     parser.add_argument('style_image_filename', type=str, help='Path to style image')
     parser.add_argument('result_image_filename', type=str, help='Path to result image')
-    parser.add_argument('--content_loss_weight', type=float, default=5e0, help='Weight for content loss function')
+    parser.add_argument('--content_loss_weight', type=float, default=1e0, help='Weight for content loss function')
     parser.add_argument('--style_loss_weight', type=float, default=1e4, help='Weight for style loss function')
     parser.add_argument('--total_variation_loss_weight', type=float, default=1e-3,
                         help='Weight for total variance loss function')
@@ -52,6 +51,7 @@ def write_result_image(result, result_image_filename):
 
     result_image = Image.fromarray(result, mode='RGB')
     result_image.save(result_image_filename)
+    result_image.show()
 
 
 def transfer_style(content_image_filename, style_image_filename, result_image_filename, content_loss_weight,
@@ -61,34 +61,37 @@ def transfer_style(content_image_filename, style_image_filename, result_image_fi
 
     image = slim.variable('input', initializer=tf.constant(np.expand_dims(content_image, 0), dtype=tf.float32),
                           trainable=True)
-    content_layer, style_layers = vgg.get_layers(image, reuse_variables=False)
-    content_layer_target = vgg.get_content_layer_target(content_image, True)
-    content_loss = vgg.get_content_loss(content_layer, content_layer_target)
+    content_layer, style_layers = losses.get_layers(vgg_tools.pre_process(image), reuse_variables=False)
 
-    style_layers_targets = vgg.get_style_layers_targets(style_image, True)
-    style_loss = vgg.get_style_loss(style_layers, style_layers_targets)
+    content_layer_target = losses.get_content_layer_values(vgg_tools.pre_process(content_image), True)
+    content_loss = losses.get_content_loss(content_layer, content_layer_target)
 
-    total_variation_loss = tf.reduce_sum(tf.image.total_variation(image))
+    style_layers_targets = losses.get_style_layers_values(vgg_tools.pre_process(style_image), True)
+    style_loss = losses.get_style_loss(style_layers, style_layers_targets)
 
-    loss = content_loss_weight * content_loss + style_loss_weight * style_loss + total_variation_loss_weight * \
-           total_variation_loss
-    train_operation = tf.train.AdamOptimizer(learning_rate=1e0).minimize(loss)
+    total_variation_loss = losses.get_total_variation_loss(image)
+
+    total_loss = content_loss_weight * content_loss + \
+                 style_loss_weight * style_loss + \
+                 total_variation_loss_weight * total_variation_loss
+    train_operation = tf.train.AdamOptimizer(learning_rate=1e0).minimize(total_loss)
 
     saver = tf.train.Saver(tf.get_collection('model_variables'))
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        saver.restore(sess, vgg.VGG_19_CHECKPOINT_FILENAME)
+        saver.restore(sess, vgg_tools.VGG_19_CHECKPOINT_FILENAME)
 
         for i in range(max_iterations):
             sess.run(train_operation)
             if verbose and (i % 50 == 0):
-                print(f'Iteration: {i}, Loss: {sess.run(loss):.4}')
+                print(f'Iteration: {i}, Loss: {sess.run(total_loss):.4}')
 
         result = sess.run(image)
         write_result_image(result, result_image_filename)
 
 
 def main():
+    vgg_tools.maybe_download_checkpoint()
     transfer_style_kwargs = parse_args()
     transfer_style(**transfer_style_kwargs)
 
