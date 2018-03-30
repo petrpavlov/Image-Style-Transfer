@@ -9,3 +9,5 @@ if not os.path.exists(FILES_DIR):
 TRAIN_IMAGE_SIZE = 256
 
 MAX_IMAGE_SIZE = 512
+
+VGG_19_CHECKPOINT_FILENAME = os.path.join(FILES_DIR, 'vgg_19.ckpt')

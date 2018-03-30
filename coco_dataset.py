@@ -9,6 +9,10 @@ from PIL import Image
 from settings import TRAIN_IMAGE_SIZE
 
 
+def maybe_download():
+    pass
+
+
 def make_square_image(image, side_size):
     size = np.asarray(image.size)
     size = (size * side_size / min(size)).astype(int)

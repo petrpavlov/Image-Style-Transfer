@@ -6,7 +6,7 @@ import tensorflow.contrib.slim as slim
 from PIL import Image
 
 from restyling import losses, vgg_tools
-from settings import MAX_IMAGE_SIZE
+from settings import MAX_IMAGE_SIZE, VGG_19_CHECKPOINT_FILENAME
 
 
 def parse_args():
@@ -79,7 +79,7 @@ def transfer_style(content_image_filename, style_image_filename, result_image_fi
     saver = tf.train.Saver(tf.get_collection('model_variables'))
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        saver.restore(sess, vgg_tools.VGG_19_CHECKPOINT_FILENAME)
+        saver.restore(sess, VGG_19_CHECKPOINT_FILENAME)
 
         for i in range(max_iterations):
             sess.run(train_operation)

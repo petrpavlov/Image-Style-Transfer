@@ -7,12 +7,11 @@ import tensorflow as tf
 
 from io import BytesIO
 
-from settings import FILES_DIR
+from settings import FILES_DIR, VGG_19_CHECKPOINT_FILENAME
 from .vgg import vgg_19
 
 
 VGG_19_CHECKPOINT_URL = 'http://download.tensorflow.org/models/vgg_19_2016_08_28.tar.gz'
-VGG_19_CHECKPOINT_FILENAME = os.path.join(FILES_DIR, 'vgg_19.ckpt')
 
 MEAN_PIXEL = np.array([123.68, 116.779, 103.939])
 

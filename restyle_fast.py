@@ -7,14 +7,14 @@ import tensorflow as tf
 from PIL import Image
 
 from restyling import losses, vgg_tools
-from settings import FILES_DIR, TRAIN_IMAGE_SIZE
+from settings import FILES_DIR, TRAIN_IMAGE_SIZE, VGG_19_CHECKPOINT_FILENAME
 
 
 MODEL_DIR = os.path.join(FILES_DIR, 'model')
 
 TRAIN_DATASET_PATH = os.path.join(FILES_DIR, 'net-train-dataset')
 TRAIN_IMAGES_DIR = os.path.join(TRAIN_DATASET_PATH, 'train-images')
-STYLE_IMAGE_FILENAME = os.path.join(TRAIN_DATASET_PATH, 'style.jpg')
+STYLE_IMAGE_FILENAME = os.path.join(FILES_DIR, 'style.jpg')
 CONTENT_IMAGE_FILENAME = os.path.join(TRAIN_DATASET_PATH, 'content.jpg')
 
 
@@ -23,7 +23,7 @@ class RestoreVgg19Hook(tf.train.SessionRunHook):
         self._saver = saver
 
     def after_create_session(self, session, coord):
-        self._saver.restore(session, vgg_tools.VGG_19_CHECKPOINT_FILENAME)
+        self._saver.restore(session, VGG_19_CHECKPOINT_FILENAME)
 
 
 def train_input_fn(images_dir, batch_size, repeat_count):
@@ -59,20 +59,20 @@ def model_fn(features, labels, mode, params):
 
     def conv_block(x, filters, kernel_size, strides):
         x = tf.layers.conv2d(x, filters=filters, kernel_size=kernel_size, strides=strides, padding='same')
-        x = tf.layers.batch_normalization(x)
+        x = tf.layers.batch_normalization(x, training=mode == tf.estimator.ModeKeys.TRAIN)
         return tf.nn.relu(x)
 
     def residual_block(x):
         f = tf.layers.conv2d(x, filters=128, kernel_size=3, strides=1, padding='same')
-        f = tf.layers.batch_normalization(f)
+        f = tf.layers.batch_normalization(f, training=mode == tf.estimator.ModeKeys.TRAIN)
         f = tf.nn.relu(f)
         f = tf.layers.conv2d(f, filters=128, kernel_size=3, strides=1, padding='same')
-        f = tf.layers.batch_normalization(f)
+        f = tf.layers.batch_normalization(f, training=mode == tf.estimator.ModeKeys.TRAIN)
         return x + f
 
     def conv_transpose_block(x, filters, kernel_size, strides):
         x = tf.layers.conv2d_transpose(x, filters=filters, kernel_size=kernel_size, strides=strides, padding='same')
-        x = tf.layers.batch_normalization(x)
+        x = tf.layers.batch_normalization(x, training=mode == tf.estimator.ModeKeys.TRAIN)
         return tf.nn.relu(x)
 
     net = conv_block(features / 255.0, filters=32, kernel_size=9, strides=1)
@@ -86,7 +86,7 @@ def model_fn(features, labels, mode, params):
     net = conv_transpose_block(net, filters=32, kernel_size=3, strides=2)
 
     net = tf.layers.conv2d(net, filters=3, kernel_size=9, strides=1, padding='same')
-    images = 127.5 + 150 * tf.nn.tanh(net)
+    images = 127.5 + 127.5 * tf.nn.tanh(net)
 
     if mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL:
         content_layer, style_layers = losses.get_layers(vgg_tools.pre_process(images), reuse_variables=False)
@@ -104,8 +104,9 @@ def model_fn(features, labels, mode, params):
                      params['style_loss_weight'] * style_loss + \
                      params['total_variation_loss_weight'] * total_variation_loss
 
-        train_op = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(total_loss,
-                                                                       global_step=tf.train.get_global_step())
+        optimizer = tf.train.AdamOptimizer(learning_rate=1e-3)
+        with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
+            train_op = optimizer.minimize(total_loss, global_step=tf.train.get_global_step())
 
         training_hooks = [
             RestoreVgg19Hook(tf.train.Saver(tf.get_collection('model_variables'))),
@@ -130,13 +131,16 @@ def train(clean=True):
         if os.path.exists(MODEL_DIR):
             shutil.rmtree(MODEL_DIR)
 
+    config = tf.estimator.RunConfig(
+        save_checkpoints_secs=60
+    )
     estimator = tf.estimator.Estimator(model_fn=model_fn, params={
         'style_image_filename': STYLE_IMAGE_FILENAME,
-        'content_loss_weight': 7.5e0,
+        'content_loss_weight': 1e1,
         'style_loss_weight': 1e2,
         'total_variation_loss_weight': 2e2
-    }, model_dir=MODEL_DIR)
-    estimator.train(input_fn=lambda: train_input_fn(TRAIN_IMAGES_DIR, 4, None), steps=100_000)
+    }, model_dir=MODEL_DIR, config=config)
+    estimator.train(input_fn=lambda: train_input_fn(TRAIN_IMAGES_DIR, 5, 2))
 
 
 def predict():
@@ -151,7 +155,7 @@ def main():
     tf.logging.set_verbosity(tf.logging.INFO)
     vgg_tools.maybe_download_checkpoint()
     try:
-        train()
+        train(clean=False)
     except KeyboardInterrupt:
         pass
     predict()
