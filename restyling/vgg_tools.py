@@ -1,34 +1,25 @@
-import os
-import requests
-import tarfile
-
 import numpy as np
 import tensorflow as tf
 
-from io import BytesIO
-
-from settings import FILES_DIR, VGG_19_CHECKPOINT_FILENAME
+from settings import VGG_19_CHECKPOINT_FILENAME, VGG_19_CONTENT_LAYER_NAME, VGG_19_STYLE_LAYERS_NAMES
 from .vgg import vgg_19
-
-
-VGG_19_CHECKPOINT_URL = 'http://download.tensorflow.org/models/vgg_19_2016_08_28.tar.gz'
 
 MEAN_PIXEL = np.array([123.68, 116.779, 103.939])
 
 
-def maybe_download_checkpoint():
-    if not os.path.exists(VGG_19_CHECKPOINT_FILENAME):
-        print(f'Checkpoint does not exist. Download from: {VGG_19_CHECKPOINT_URL}')
-        response = requests.get(VGG_19_CHECKPOINT_URL)
-
-        print(f'Extract checkpoint into {FILES_DIR}')
-        with tarfile.open(fileobj=BytesIO(response.content)) as tar:
-            tar.extractall(FILES_DIR)
-
-
 def get_layers(inputs, reuse_variables):
     _, layers = vgg_19(inputs, num_classes=None, reuse=reuse_variables)
-    return layers
+    content_layer = layers[VGG_19_CONTENT_LAYER_NAME]
+    style_layers = [layers[name] for name in VGG_19_STYLE_LAYERS_NAMES]
+    return content_layer, style_layers
+
+
+def get_style_layers_values(style_image, reuse_variables):
+    return get_layers_values(style_image, VGG_19_STYLE_LAYERS_NAMES, reuse_variables)
+
+
+def get_content_layer_values(content_image, reuse_variables):
+    return get_layers_values(content_image, [VGG_19_CONTENT_LAYER_NAME], reuse_variables)[0]
 
 
 def get_layers_values(image, layer_names, reuse_variables):

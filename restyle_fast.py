@@ -7,15 +7,13 @@ import tensorflow as tf
 from PIL import Image
 
 from restyling import losses, vgg_tools
-from settings import FILES_DIR, TRAIN_IMAGE_SIZE, VGG_19_CHECKPOINT_FILENAME
+from settings import FILES_DIR, TRAIN_IMAGE_SIZE, TRAIN_DATASET_PATH, MODEL_DIR, VGG_19_CHECKPOINT_FILENAME
+from prepare import prepare_vgg_19_checkpoint, prepare_dataset
 
 
-MODEL_DIR = os.path.join(FILES_DIR, 'model')
-
-TRAIN_DATASET_PATH = os.path.join(FILES_DIR, 'net-train-dataset')
-TRAIN_IMAGES_DIR = os.path.join(TRAIN_DATASET_PATH, 'train-images')
 STYLE_IMAGE_FILENAME = os.path.join(FILES_DIR, 'style.jpg')
-CONTENT_IMAGE_FILENAME = os.path.join(TRAIN_DATASET_PATH, 'content.jpg')
+CONTENT_IMAGE_FILENAME = os.path.join(FILES_DIR, 'cat.jpg')
+RESULT_FILENAME = os.path.join(FILES_DIR, 'cat_result_fast.jpg')
 
 
 class RestoreVgg19Hook(tf.train.SessionRunHook):
@@ -51,7 +49,6 @@ def predict_input_fn(image_filename):
     content = tf.read_file(image_filename)
     image = tf.image.decode_jpeg(content, channels=3)
     image = tf.cast(image, tf.float32)
-    image.set_shape((TRAIN_IMAGE_SIZE, TRAIN_IMAGE_SIZE, 3))
     return tf.expand_dims(image, 0)
 
 
@@ -89,13 +86,14 @@ def model_fn(features, labels, mode, params):
     images = 127.5 + 127.5 * tf.nn.tanh(net)
 
     if mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL:
-        content_layer, style_layers = losses.get_layers(vgg_tools.pre_process(images), reuse_variables=False)
+        content_layer, style_layers = vgg_tools.get_layers(vgg_tools.pre_process(images), reuse_variables=False)
 
-        content_layer_target, _ = losses.get_layers(vgg_tools.pre_process(features), reuse_variables=True)
+        content_layer_target, _ = vgg_tools.get_layers(vgg_tools.pre_process(features), reuse_variables=True)
         content_loss = losses.get_content_loss(content_layer, content_layer_target)
 
         style_image = np.asarray(Image.open(params['style_image_filename']))
-        style_layers_targets = losses.get_style_layers_values(vgg_tools.pre_process(style_image), reuse_variables=True)
+        style_layers_targets = vgg_tools.get_style_layers_values(vgg_tools.pre_process(style_image), reuse_variables=True)
+
         style_loss = losses.get_style_loss(style_layers, style_layers_targets)
 
         total_variation_loss = losses.get_total_variation_loss(images)
@@ -132,15 +130,18 @@ def train(clean=True):
             shutil.rmtree(MODEL_DIR)
 
     config = tf.estimator.RunConfig(
-        save_checkpoints_secs=60
+        save_checkpoints_secs=30
     )
     estimator = tf.estimator.Estimator(model_fn=model_fn, params={
         'style_image_filename': STYLE_IMAGE_FILENAME,
-        'content_loss_weight': 1e1,
-        'style_loss_weight': 1e2,
-        'total_variation_loss_weight': 2e2
+        'content_loss_weight': 1e0,
+        'style_loss_weight': 1e4,
+        'total_variation_loss_weight': 1e-3
     }, model_dir=MODEL_DIR, config=config)
-    estimator.train(input_fn=lambda: train_input_fn(TRAIN_IMAGES_DIR, 5, 2))
+    try:
+        estimator.train(input_fn=lambda: train_input_fn(TRAIN_DATASET_PATH, 4, 2))
+    except KeyboardInterrupt:
+        pass
 
 
 def predict():
@@ -148,16 +149,17 @@ def predict():
 
     image = next(estimator.predict(input_fn=lambda: predict_input_fn(CONTENT_IMAGE_FILENAME)))['images']
     image = np.clip(image, 0, 255).astype(np.uint8)
-    Image.fromarray(image, mode='RGB').show()
+    image = Image.fromarray(image, mode='RGB')
+    image.save(RESULT_FILENAME)
 
 
 def main():
     tf.logging.set_verbosity(tf.logging.INFO)
-    vgg_tools.maybe_download_checkpoint()
-    try:
-        train(clean=False)
-    except KeyboardInterrupt:
-        pass
+
+    prepare_vgg_19_checkpoint()
+    prepare_dataset()
+
+    train(clean=True)
     predict()
 
     
