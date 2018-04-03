@@ -53,23 +53,24 @@ def predict_input_fn(image_filename):
 
 
 def model_fn(features, labels, mode, params):
+    training = (mode == tf.estimator.ModeKeys.TRAIN)
 
     def conv_block(x, filters, kernel_size, strides):
         x = tf.layers.conv2d(x, filters=filters, kernel_size=kernel_size, strides=strides, padding='same')
-        x = tf.layers.batch_normalization(x, training=mode == tf.estimator.ModeKeys.TRAIN)
+        x = tf.layers.batch_normalization(x, training=training)
         return tf.nn.relu(x)
 
     def residual_block(x):
         f = tf.layers.conv2d(x, filters=128, kernel_size=3, strides=1, padding='same')
-        f = tf.layers.batch_normalization(f, training=mode == tf.estimator.ModeKeys.TRAIN)
+        f = tf.layers.batch_normalization(f, training=training)
         f = tf.nn.relu(f)
         f = tf.layers.conv2d(f, filters=128, kernel_size=3, strides=1, padding='same')
-        f = tf.layers.batch_normalization(f, training=mode == tf.estimator.ModeKeys.TRAIN)
+        f = tf.layers.batch_normalization(f, training=training)
         return x + f
 
     def conv_transpose_block(x, filters, kernel_size, strides):
         x = tf.layers.conv2d_transpose(x, filters=filters, kernel_size=kernel_size, strides=strides, padding='same')
-        x = tf.layers.batch_normalization(x, training=mode == tf.estimator.ModeKeys.TRAIN)
+        x = tf.layers.batch_normalization(x, training=training)
         return tf.nn.relu(x)
 
     net = conv_block(features / 255.0, filters=32, kernel_size=9, strides=1)

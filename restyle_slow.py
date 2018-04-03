@@ -17,8 +17,8 @@ def parse_args():
     parser.add_argument('style_image_filename', type=str, help='Path to style image')
     parser.add_argument('result_image_filename', type=str, help='Path to result image')
     parser.add_argument('--content_loss_weight', type=float, default=1e0, help='Weight for content loss function')
-    parser.add_argument('--style_loss_weight', type=float, default=1e4, help='Weight for style loss function')
-    parser.add_argument('--total_variation_loss_weight', type=float, default=1e-3,
+    parser.add_argument('--style_loss_weight', type=float, default=1e2, help='Weight for style loss function')
+    parser.add_argument('--total_variation_loss_weight', type=float, default=1e-2,
                         help='Weight for total variance loss function')
     parser.add_argument('--max_iterations', type=int, default=1000, help='Maximum training iterations count')
 
@@ -54,7 +54,7 @@ def write_result_image(result, result_image_filename):
 
 
 def transfer_style(content_image_filename, style_image_filename, result_image_filename, content_loss_weight,
-                   style_loss_weight, total_variation_loss_weight, max_iterations, verbose):
+                   style_loss_weight, total_variation_loss_weight, max_iterations):
     content_image = read_content_image(content_image_filename)
     style_image = read_style_image(style_image_filename, content_image.shape[:2])
 
@@ -87,7 +87,7 @@ def transfer_style(content_image_filename, style_image_filename, result_image_fi
                 train_operation
             ])
             if i % 50 == 0:
-                print(f'Iteration: {i}, Content loss: {content_loss_value:.4}. Style loss: {style_loss_value:.4}.'
+                print(f'Iteration: {i}, Content loss: {content_loss_value:.4}. Style loss: {style_loss_value:.4}. '
                       f'Total variation loss: {total_variation_loss_value:.4}. Total loss: {total_loss_value:.4}')
 
         result = sess.run(image)
