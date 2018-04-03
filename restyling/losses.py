@@ -21,7 +21,7 @@ def style_layer_loss(a, x):
     gram_a = gram_matrix(a)
     gram_x = gram_matrix(x)
 
-    loss = tf.nn.l2_loss(gram_a - gram_x)
+    loss = 2 * tf.nn.l2_loss(gram_a - gram_x) / tf.cast(tf.shape(x)[0], tf.float32)
 
     return loss
 
@@ -29,18 +29,18 @@ def style_layer_loss(a, x):
 def get_style_loss(style_layers, style_layers_targets):
     loss = 0
     for layer, value, weight in zip(style_layers, style_layers_targets, VGG_19_STYLE_LAYERS_WEIGHTS):
-        loss += style_layer_loss(value, layer) * weight
+        loss += weight * style_layer_loss(value, layer)
 
     return loss
 
 
 def get_content_loss(content_layer, content_layer_target):
-    loss = tf.nn.l2_loss(content_layer_target - content_layer)
+    loss = 2 * tf.nn.l2_loss(content_layer_target - content_layer) / tf.cast(tf.size(content_layer), tf.float32)
 
     return loss
 
 
 def get_total_variation_loss(images):
-    loss = tf.reduce_sum(tf.image.total_variation(images))
+    loss = tf.reduce_sum(tf.image.total_variation(images)) / tf.cast(tf.shape(images)[0], tf.float32)
 
     return loss

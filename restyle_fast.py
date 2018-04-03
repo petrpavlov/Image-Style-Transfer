@@ -89,18 +89,15 @@ def model_fn(features, labels, mode, params):
         content_layer, style_layers = vgg_tools.get_layers(vgg_tools.pre_process(images), reuse_variables=False)
 
         content_layer_target, _ = vgg_tools.get_layers(vgg_tools.pre_process(features), reuse_variables=True)
-        content_loss = losses.get_content_loss(content_layer, content_layer_target)
+        content_loss = params['content_loss_weight'] * losses.get_content_loss(content_layer, content_layer_target)
 
         style_image = np.asarray(Image.open(params['style_image_filename']))
         style_layers_targets = vgg_tools.get_style_layers_values(vgg_tools.pre_process(style_image), reuse_variables=True)
+        style_loss = params['style_loss_weight'] * losses.get_style_loss(style_layers, style_layers_targets)
 
-        style_loss = losses.get_style_loss(style_layers, style_layers_targets)
+        total_variation_loss = params['total_variation_loss_weight'] * losses.get_total_variation_loss(images)
 
-        total_variation_loss = losses.get_total_variation_loss(images)
-
-        total_loss = params['content_loss_weight'] * content_loss + \
-                     params['style_loss_weight'] * style_loss + \
-                     params['total_variation_loss_weight'] * total_variation_loss
+        total_loss = content_loss + style_loss + total_variation_loss
 
         optimizer = tf.train.AdamOptimizer(learning_rate=1e-3)
         with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):

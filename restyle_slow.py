@@ -21,8 +21,6 @@ def parse_args():
     parser.add_argument('--total_variation_loss_weight', type=float, default=1e-3,
                         help='Weight for total variance loss function')
     parser.add_argument('--max_iterations', type=int, default=1000, help='Maximum training iterations count')
-    parser.add_argument('--verbose', action='store_true',
-                        help='Boolean flag indicating if training information should be printed.')
 
     return vars(parser.parse_args())
 
@@ -65,16 +63,14 @@ def transfer_style(content_image_filename, style_image_filename, result_image_fi
     content_layer, style_layers = vgg_tools.get_layers(vgg_tools.pre_process(image), reuse_variables=False)
 
     content_layer_target = vgg_tools.get_content_layer_values(vgg_tools.pre_process(content_image), True)
-    content_loss = losses.get_content_loss(content_layer, content_layer_target)
+    content_loss = content_loss_weight * losses.get_content_loss(content_layer, content_layer_target)
 
     style_layers_targets = vgg_tools.get_style_layers_values(vgg_tools.pre_process(style_image), True)
-    style_loss = losses.get_style_loss(style_layers, style_layers_targets)
+    style_loss = style_loss_weight * losses.get_style_loss(style_layers, style_layers_targets)
 
-    total_variation_loss = losses.get_total_variation_loss(image)
+    total_variation_loss = total_variation_loss_weight * losses.get_total_variation_loss(image)
 
-    total_loss = content_loss_weight * content_loss + \
-                 style_loss_weight * style_loss + \
-                 total_variation_loss_weight * total_variation_loss
+    total_loss = content_loss + style_loss + total_variation_loss
     train_operation = tf.train.AdamOptimizer(learning_rate=1e0).minimize(total_loss)
 
     saver = tf.train.Saver(tf.get_collection('model_variables'))
@@ -83,9 +79,16 @@ def transfer_style(content_image_filename, style_image_filename, result_image_fi
         saver.restore(sess, VGG_19_CHECKPOINT_FILENAME)
 
         for i in range(max_iterations):
-            sess.run(train_operation)
-            if verbose and (i % 50 == 0):
-                print(f'Iteration: {i}, Loss: {sess.run(total_loss):.4}')
+            content_loss_value, style_loss_value, total_variation_loss_value, total_loss_value, _ = sess.run([
+                content_loss,
+                style_loss,
+                total_variation_loss,
+                total_loss,
+                train_operation
+            ])
+            if i % 50 == 0:
+                print(f'Iteration: {i}, Content loss: {content_loss_value:.4}. Style loss: {style_loss_value:.4}.'
+                      f'Total variation loss: {total_variation_loss_value:.4}. Total loss: {total_loss_value:.4}')
 
         result = sess.run(image)
         write_result_image(result, result_image_filename)
