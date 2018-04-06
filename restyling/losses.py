@@ -21,7 +21,7 @@ def style_layer_loss(a, x):
     gram_a = gram_matrix(a)
     gram_x = gram_matrix(x)
 
-    loss = 2 * tf.nn.l2_loss(gram_a - gram_x) / tf.cast(tf.shape(x)[0], tf.float32)
+    loss = 2 * tf.nn.l2_loss(gram_a - gram_x) / tf.cast(tf.size(gram_a), tf.float32)
 
     return loss
 

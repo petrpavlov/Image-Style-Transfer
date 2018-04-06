@@ -1,19 +1,13 @@
+import argparse
 import os
 import shutil
 
 import numpy as np
 import tensorflow as tf
-
 from PIL import Image
 
 from restyling import losses, vgg_tools
-from settings import FILES_DIR, TRAIN_IMAGE_SIZE, TRAIN_DATASET_PATH, MODEL_DIR, VGG_19_CHECKPOINT_FILENAME
-from prepare import prepare_vgg_19_checkpoint, prepare_dataset
-
-
-STYLE_IMAGE_FILENAME = os.path.join(FILES_DIR, 'style.jpg')
-CONTENT_IMAGE_FILENAME = os.path.join(FILES_DIR, 'cat.jpg')
-RESULT_FILENAME = os.path.join(FILES_DIR, 'cat_result_fast.jpg')
+from settings import TRAIN_IMAGE_SIZE, COCO_DATASET_PATH, MODEL_DIR, VGG_19_CHECKPOINT_FILENAME
 
 
 class RestoreVgg19Hook(tf.train.SessionRunHook):
@@ -24,9 +18,8 @@ class RestoreVgg19Hook(tf.train.SessionRunHook):
         self._saver.restore(session, VGG_19_CHECKPOINT_FILENAME)
 
 
-def train_input_fn(images_dir, batch_size, repeat_count):
-    filenames = [f for f in os.listdir(images_dir) if os.path.splitext(f)[1] == '.jpg']
-    filenames = list(map(lambda x: os.path.join(images_dir, x), filenames))
+def train_input_fn(batch_size, repeat_count):
+    filenames = [os.path.join(COCO_DATASET_PATH, f) for f in os.listdir(COCO_DATASET_PATH)]
 
     dataset = tf.data.Dataset.from_tensor_slices(filenames)
 
@@ -37,6 +30,7 @@ def train_input_fn(images_dir, batch_size, repeat_count):
         image.set_shape((TRAIN_IMAGE_SIZE, TRAIN_IMAGE_SIZE, 3))
         return image
 
+    dataset = dataset.shuffle(buffer_size=batch_size * 100)
     dataset = dataset.map(decode_image, num_parallel_calls=10)
     dataset = dataset.batch(batch_size)
     dataset = dataset.repeat(repeat_count)
@@ -55,10 +49,13 @@ def predict_input_fn(image_filename):
 def model_fn(features, labels, mode, params):
     training = (mode == tf.estimator.ModeKeys.TRAIN)
 
-    def conv_block(x, filters, kernel_size, strides):
+    def conv_block(x, filters, kernel_size, strides, relu=True):
         x = tf.layers.conv2d(x, filters=filters, kernel_size=kernel_size, strides=strides, padding='same')
         x = tf.layers.batch_normalization(x, training=training)
-        return tf.nn.relu(x)
+        if relu:
+            return tf.nn.relu(x)
+        else:
+            return x
 
     def residual_block(x):
         f = tf.layers.conv2d(x, filters=128, kernel_size=3, strides=1, padding='same')
@@ -77,23 +74,23 @@ def model_fn(features, labels, mode, params):
     net = conv_block(net, filters=64, kernel_size=3, strides=2)
     net = conv_block(net, filters=128, kernel_size=3, strides=2)
 
-    for i in range(5):
+    for _ in range(5):
         net = residual_block(net)
 
     net = conv_transpose_block(net, filters=64, kernel_size=3, strides=2)
     net = conv_transpose_block(net, filters=32, kernel_size=3, strides=2)
 
-    net = tf.layers.conv2d(net, filters=3, kernel_size=9, strides=1, padding='same')
+    net = conv_block(net, filters=3, kernel_size=9, strides=1, relu=False)
     images = 127.5 + 127.5 * tf.nn.tanh(net)
 
     if mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL:
-        content_layer, style_layers = vgg_tools.get_layers(vgg_tools.pre_process(images), reuse_variables=False)
+        content_layer, style_layers = vgg_tools.get_layers(images, reuse_variables=False)
 
-        content_layer_target, _ = vgg_tools.get_layers(vgg_tools.pre_process(features), reuse_variables=True)
+        content_layer_target, _ = vgg_tools.get_layers(features, reuse_variables=True)
         content_loss = params['content_loss_weight'] * losses.get_content_loss(content_layer, content_layer_target)
 
         style_image = np.asarray(Image.open(params['style_image_filename']))
-        style_layers_targets = vgg_tools.get_style_layers_values(vgg_tools.pre_process(style_image), reuse_variables=True)
+        style_layers_targets = vgg_tools.get_style_layers_values(style_image, reuse_variables=True)
         style_loss = params['style_loss_weight'] * losses.get_style_loss(style_layers, style_layers_targets)
 
         total_variation_loss = params['total_variation_loss_weight'] * losses.get_total_variation_loss(images)
@@ -122,8 +119,8 @@ def model_fn(features, labels, mode, params):
         return tf.estimator.EstimatorSpec(mode, predictions=predictions)
 
 
-def train(clean=True):
-    if clean:
+def train(args):
+    if args.clean:
         if os.path.exists(MODEL_DIR):
             shutil.rmtree(MODEL_DIR)
 
@@ -131,34 +128,53 @@ def train(clean=True):
         save_checkpoints_secs=30
     )
     estimator = tf.estimator.Estimator(model_fn=model_fn, params={
-        'style_image_filename': STYLE_IMAGE_FILENAME,
-        'content_loss_weight': 1e0,
-        'style_loss_weight': 1e4,
-        'total_variation_loss_weight': 1e-3
+        'style_image_filename': args.style_image_filename,
+        'content_loss_weight': args.content_loss_weight,
+        'style_loss_weight': args.style_loss_weight,
+        'total_variation_loss_weight': args.total_variation_loss_weight
     }, model_dir=MODEL_DIR, config=config)
     try:
-        estimator.train(input_fn=lambda: train_input_fn(TRAIN_DATASET_PATH, 4, 2))
+        estimator.train(input_fn=lambda: train_input_fn(4, 2))
     except KeyboardInterrupt:
         pass
 
 
-def predict():
+def predict(args):
     estimator = tf.estimator.Estimator(model_fn=model_fn, params={}, model_dir=MODEL_DIR)
 
-    image = next(estimator.predict(input_fn=lambda: predict_input_fn(CONTENT_IMAGE_FILENAME)))['images']
+    image = next(estimator.predict(input_fn=lambda: predict_input_fn(args.content_image_filename)))['images']
     image = np.clip(image, 0, 255).astype(np.uint8)
     image = Image.fromarray(image, mode='RGB')
-    image.save(RESULT_FILENAME)
+    image.save(args.result_filename)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Simple implementation of "A Neural Algorithm for Artistic Style"')
+    subparsers = parser.add_subparsers()
+
+    parser_train = subparsers.add_parser('train', help='Train model')
+    parser_train.add_argument('style_image_filename', type=str, help='Path to style image')
+    parser_train.add_argument('--content_loss_weight', type=float, default=1e0, help='Weight for content loss function')
+    parser_train.add_argument('--style_loss_weight', type=float, default=1e2, help='Weight for style loss function')
+    parser_train.add_argument('--total_variation_loss_weight', type=float, default=1e-4,
+                              help='Weight for total variance loss function')
+    parser_train.add_argument('--clean', action='store_true',
+                              help='Should perform clean training (remove saved checkpoints)')
+    parser_train.set_defaults(func=train)
+
+    parser_predict = subparsers.add_parser('predict', help='Transfer style of image')
+    parser_predict.add_argument('content_image_filename', type=str, help='Path to content image')
+    parser_predict.add_argument('result_image_filename', type=str, help='Path to result image')
+    parser_predict.set_defaults(func=predict)
+
+    args = parser.parse_args()
+    args.func(args)
 
 
 def main():
     tf.logging.set_verbosity(tf.logging.INFO)
 
-    prepare_vgg_19_checkpoint()
-    prepare_dataset()
-
-    train(clean=True)
-    predict()
+    parse_args()
 
     
 if __name__ == '__main__':

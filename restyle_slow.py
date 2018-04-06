@@ -7,18 +7,17 @@ from PIL import Image
 
 from restyling import losses, vgg_tools
 from settings import MAX_IMAGE_SIZE, VGG_19_CHECKPOINT_FILENAME
-from prepare import prepare_vgg_19_checkpoint
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Simple implementation fo "A Neural Algorithm for Artistic Style"')
+    parser = argparse.ArgumentParser(description='Simple implementation of "A Neural Algorithm for Artistic Style"')
 
     parser.add_argument('content_image_filename', type=str, help='Path to content image')
     parser.add_argument('style_image_filename', type=str, help='Path to style image')
     parser.add_argument('result_image_filename', type=str, help='Path to result image')
     parser.add_argument('--content_loss_weight', type=float, default=1e0, help='Weight for content loss function')
     parser.add_argument('--style_loss_weight', type=float, default=1e2, help='Weight for style loss function')
-    parser.add_argument('--total_variation_loss_weight', type=float, default=1e-2,
+    parser.add_argument('--total_variation_loss_weight', type=float, default=1e-4,
                         help='Weight for total variance loss function')
     parser.add_argument('--max_iterations', type=int, default=1000, help='Maximum training iterations count')
 
@@ -60,12 +59,12 @@ def transfer_style(content_image_filename, style_image_filename, result_image_fi
 
     image = slim.variable('input', initializer=tf.constant(np.expand_dims(content_image, 0), dtype=tf.float32),
                           trainable=True)
-    content_layer, style_layers = vgg_tools.get_layers(vgg_tools.pre_process(image), reuse_variables=False)
+    content_layer, style_layers = vgg_tools.get_layers(image, reuse_variables=False)
 
-    content_layer_target = vgg_tools.get_content_layer_values(vgg_tools.pre_process(content_image), True)
+    content_layer_target = vgg_tools.get_content_layer_values(content_image, True)
     content_loss = content_loss_weight * losses.get_content_loss(content_layer, content_layer_target)
 
-    style_layers_targets = vgg_tools.get_style_layers_values(vgg_tools.pre_process(style_image), True)
+    style_layers_targets = vgg_tools.get_style_layers_values(style_image, True)
     style_loss = style_loss_weight * losses.get_style_loss(style_layers, style_layers_targets)
 
     total_variation_loss = total_variation_loss_weight * losses.get_total_variation_loss(image)
@@ -95,8 +94,6 @@ def transfer_style(content_image_filename, style_image_filename, result_image_fi
 
 
 def main():
-    prepare_vgg_19_checkpoint()
-
     transfer_style_kwargs = parse_args()
     transfer_style(**transfer_style_kwargs)
 
