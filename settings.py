@@ -10,7 +10,7 @@ MAX_IMAGE_SIZE = 512
 
 COCO_DATASET_URL = 'http://msvocds.blob.core.windows.net/coco2014/train2014.zip'
 COCO_DATASET_ZIP_FILE = os.path.join(FILES_DIR, 'train2014.zip')
-COCO_DATASET_PATH = os.path.join(FILES_DIR, 'coco-dataset')
+COCO_DATASET_PATH = os.path.join(FILES_DIR, 'train2014')
 TRAIN_IMAGE_SIZE = 256
 
 MODEL_DIR = os.path.join(FILES_DIR, 'model')

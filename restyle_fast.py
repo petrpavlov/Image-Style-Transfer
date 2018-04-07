@@ -145,7 +145,7 @@ def predict(args):
     image = next(estimator.predict(input_fn=lambda: predict_input_fn(args.content_image_filename)))['images']
     image = np.clip(image, 0, 255).astype(np.uint8)
     image = Image.fromarray(image, mode='RGB')
-    image.save(args.result_filename)
+    image.save(args.result_image_filename)
 
 
 def parse_args():

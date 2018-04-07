@@ -34,7 +34,7 @@ def _download_dataset():
 
         with open(COCO_DATASET_ZIP_FILE, 'wb') as f:
             r = requests.get(COCO_DATASET_URL, stream=True)
-            for chunk in r.iter_content(chunk_size=1_000_000):
+            for chunk in r.iter_content(chunk_size=500_000_000):
                 f.write(chunk)
     else:
         print(f'Dataset file ({COCO_DATASET_ZIP_FILE}) already exists')
@@ -62,11 +62,13 @@ def _rescale_dataset():
         os.mkdir(COCO_DATASET_PATH)
 
         with ZipFile(COCO_DATASET_ZIP_FILE) as zip_file:
-            for image_filename in zip_file.namelist():
-                with zip_file.open(image_filename) as image_file:
-                    image = Image.open(image_file)
-                    image = _rescale_image(image)
-                    image.save(os.path.join(COCO_DATASET_PATH, image_filename))
+            for info in zip_file.infolist():
+                if not info.is_dir():
+                    with zip_file.open(info.filename) as image_file:
+                        image = Image.open(image_file)
+                        if image.mode == 'RGB':
+                            image = _rescale_image(image)
+                            image.save(os.path.join(FILES_DIR, info.filename))
     else:
         print('Scaled dataset already exists.')
 
