@@ -9,3 +9,11 @@ This is implementation of style transfer algorithm described in:
 * [Numpy](http://www.numpy.org/)
 * [Pillow](https://pillow.readthedocs.io/en/latest/)
 * [Requests](http://docs.python-requests.org/en/master/)
+
+## Example
+
+<p align="center">
+<img src="examples/cat/content.jpg" width="250"/>
+<img src="examples/cat/style.jpg" width="250"/>
+<img src="examples/cat/result.jpg" width="250"/>
+</p>
